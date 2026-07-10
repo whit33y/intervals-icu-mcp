@@ -79,11 +79,23 @@ export interface EventInput {
   moving_time?: number;
 }
 
+function withDefaults(event: EventInput): EventInput {
+  return { ...event, category: event.category ?? "WORKOUT" };
+}
+
 export function createEvent(creds: IntervalsCreds, event: EventInput) {
-  return request(creds, "POST", athletePath(creds, "/events"), {
-    category: "WORKOUT",
-    ...event,
-  });
+  return request(creds, "POST", athletePath(creds, "/events"), withDefaults(event));
+}
+
+export function createEvents(creds: IntervalsCreds, events: EventInput[]) {
+  // The bulk endpoint (unlike /events) needs a full datetime, so pad bare YYYY-MM-DD dates.
+  const payload = events.map((e) => ({
+    ...withDefaults(e),
+    start_date_local: /^\d{4}-\d{2}-\d{2}$/.test(e.start_date_local)
+      ? `${e.start_date_local}T00:00:00`
+      : e.start_date_local,
+  }));
+  return request(creds, "POST", athletePath(creds, "/events/bulk"), payload);
 }
 
 export function updateEvent(creds: IntervalsCreds, eventId: string, fields: Partial<EventInput>) {
@@ -92,4 +104,73 @@ export function updateEvent(creds: IntervalsCreds, eventId: string, fields: Part
 
 export function deleteEvent(creds: IntervalsCreds, eventId: string) {
   return request(creds, "DELETE", athletePath(creds, `/events/${eventId}`));
+}
+
+export function getSportSettings(creds: IntervalsCreds) {
+  return request(creds, "GET", athletePath(creds, "/sport-settings"));
+}
+
+export function getActivityIntervals(creds: IntervalsCreds, activityId: string) {
+  return request(creds, "GET", `/activity/${activityId}/intervals`);
+}
+
+export function getAthleteCurves(
+  creds: IntervalsCreds,
+  metric: "power" | "pace" | "hr",
+  type?: string,
+  newest?: string,
+  curves?: string, // comma-separated comparison periods, e.g. "42d,1y" (not durations)
+) {
+  const params = new URLSearchParams();
+  if (type) params.set("type", type);
+  if (newest) params.set("newest", newest);
+  if (curves) params.set("curves", curves);
+  const qs = params.toString();
+  return request(creds, "GET", athletePath(creds, `/${metric}-curves.json${qs ? `?${qs}` : ""}`));
+}
+
+// Common wellness fields; any subset can be sent. Full schema has ~46 fields.
+export interface WellnessInput {
+  weight?: number;
+  restingHR?: number;
+  hrv?: number;
+  sleepSecs?: number;
+  sleepQuality?: number;
+  fatigue?: number;
+  soreness?: number;
+  stress?: number;
+  mood?: number;
+  motivation?: number;
+  spO2?: number;
+  comments?: string;
+}
+
+export function logWellness(creds: IntervalsCreds, date: string, fields: WellnessInput) {
+  return request(creds, "PUT", athletePath(creds, `/wellness/${date}`), fields);
+}
+
+export function markEventDone(creds: IntervalsCreds, eventId: string) {
+  return request(creds, "POST", athletePath(creds, `/events/${eventId}/mark-done`));
+}
+
+export function getAthleteSummary(creds: IntervalsCreds, start?: string, end?: string) {
+  const params = new URLSearchParams();
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const qs = params.toString();
+  return request(creds, "GET", athletePath(creds, `/athlete-summary.json${qs ? `?${qs}` : ""}`));
+}
+
+export function getWeatherForecast(creds: IntervalsCreds) {
+  return request(creds, "GET", athletePath(creds, "/weather-forecast"));
+}
+
+export interface ActivityUpdate {
+  name?: string;
+  type?: string;
+  description?: string;
+}
+
+export function updateActivity(creds: IntervalsCreds, activityId: string, fields: ActivityUpdate) {
+  return request(creds, "PUT", `/activity/${activityId}`, fields);
 }

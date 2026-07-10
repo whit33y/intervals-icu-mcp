@@ -7,6 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import * as intervals from "./intervals-client.js";
 import type { IntervalsCreds } from "./intervals-client.js";
+import { planRace, nextBlock, analyzeForm } from "./prompts.js";
 
 config({ path: join(dirname(fileURLToPath(import.meta.url)), "..", ".env"), quiet: true });
 
@@ -108,10 +109,34 @@ server.registerTool(
       type: z.string().optional().describe("e.g. Ride, Run, Swim, Workout"),
       description: z.string().optional().describe("Workout structure in intervals.icu workout syntax"),
       moving_time: z.number().int().positive().optional().describe("Planned duration in seconds"),
+      category: z.string().optional().describe("WORKOUT (default) | RACE_A | RACE_B | NOTE"),
       athlete_id: athleteIdParam,
     },
   },
   async ({ athlete_id, ...event }) => textResult(await intervals.createEvent(creds(athlete_id), event)),
+);
+
+const eventShape = {
+  start_date_local: dateParam.describe("Date of the workout, YYYY-MM-DD"),
+  name: z.string().optional(),
+  type: z.string().optional().describe("e.g. Ride, Run, Swim, Workout"),
+  description: z.string().optional().describe("Workout structure in intervals.icu workout syntax"),
+  moving_time: z.number().int().positive().optional().describe("Planned duration in seconds"),
+  category: z.string().optional().describe("WORKOUT (default) | RACE_A | RACE_B | NOTE"),
+};
+
+server.registerTool(
+  "create_events",
+  {
+    description:
+      "Create many planned workouts at once (e.g. a whole training block) in a single call. " +
+      "Same fields per event as create_event.",
+    inputSchema: {
+      events: z.array(z.object(eventShape)).describe("Array of workouts to create"),
+      athlete_id: athleteIdParam,
+    },
+  },
+  async ({ events, athlete_id }) => textResult(await intervals.createEvents(creds(athlete_id), events)),
 );
 
 server.registerTool(
@@ -142,6 +167,147 @@ server.registerTool(
     await intervals.deleteEvent(creds(athlete_id), event_id);
     return textResult({ deleted: event_id });
   },
+);
+
+server.registerTool(
+  "get_sport_settings",
+  {
+    description:
+      "Get the athlete's sport settings: FTP, threshold pace, LTHR and power/HR/pace training zones per sport. " +
+      "Essential context for writing workouts and interpreting activity data.",
+    inputSchema: { athlete_id: athleteIdParam },
+  },
+  async ({ athlete_id }) => textResult(await intervals.getSportSettings(creds(athlete_id))),
+);
+
+server.registerTool(
+  "get_activity_intervals",
+  {
+    description: "Get the interval/lap breakdown of an activity (power, HR, pace per interval), to review workout execution vs target.",
+    inputSchema: { activity_id: z.string(), athlete_id: athleteIdParam },
+  },
+  async ({ activity_id, athlete_id }) => textResult(await intervals.getActivityIntervals(creds(athlete_id), activity_id)),
+);
+
+server.registerTool(
+  "get_athlete_curves",
+  {
+    description:
+      "Get the athlete's best-effort curve (best value for each duration) over a period - a benchmark of fitness. " +
+      "metric=power|pace|hr. type (sport, e.g. Ride/Run) is required for power.",
+    inputSchema: {
+      metric: z.enum(["power", "pace", "hr"]),
+      type: z.string().optional().describe("Sport, e.g. Ride, Run, Swim. Required for power."),
+      newest: dateParam.optional().describe("End date of the window, defaults to last year"),
+      curves: z.string().optional().describe("Comma separated comparison periods, e.g. '42d,1y'. Defaults to last year. Each returns best value per duration."),
+      athlete_id: athleteIdParam,
+    },
+  },
+  async ({ metric, type, newest, curves, athlete_id }) =>
+    textResult(await intervals.getAthleteCurves(creds(athlete_id), metric, type, newest, curves)),
+);
+
+server.registerTool(
+  "log_wellness",
+  {
+    description: "Log/update daily wellness for a date (weight, resting HR, HRV, sleep, fatigue, soreness, mood, etc.). Only sends the fields you provide.",
+    inputSchema: {
+      date: dateParam,
+      weight: z.number().positive().optional().describe("kg"),
+      restingHR: z.number().int().positive().optional(),
+      hrv: z.number().positive().optional(),
+      sleepSecs: z.number().int().positive().optional().describe("Sleep duration in seconds"),
+      sleepQuality: z.number().int().min(1).max(4).optional(),
+      fatigue: z.number().int().min(1).max(4).optional(),
+      soreness: z.number().int().min(1).max(4).optional(),
+      stress: z.number().int().min(1).max(4).optional(),
+      mood: z.number().int().min(1).max(4).optional(),
+      motivation: z.number().int().min(1).max(4).optional(),
+      spO2: z.number().optional(),
+      comments: z.string().optional(),
+      athlete_id: athleteIdParam,
+    },
+  },
+  async ({ date, athlete_id, ...fields }) => textResult(await intervals.logWellness(creds(athlete_id), date, fields)),
+);
+
+server.registerTool(
+  "mark_event_done",
+  {
+    description: "Mark a planned calendar workout as completed.",
+    inputSchema: { event_id: z.string(), athlete_id: athleteIdParam },
+  },
+  async ({ event_id, athlete_id }) => textResult(await intervals.markEventDone(creds(athlete_id), event_id)),
+);
+
+server.registerTool(
+  "get_athlete_summary",
+  {
+    description: "Get aggregate training stats (load, distance, time) over a period, for weekly/monthly reports.",
+    inputSchema: {
+      start: dateParam.optional().describe("Oldest date, ISO-8601"),
+      end: dateParam.optional().describe("Newest date, ISO-8601"),
+      athlete_id: athleteIdParam,
+    },
+  },
+  async ({ start, end, athlete_id }) => textResult(await intervals.getAthleteSummary(creds(athlete_id), start, end)),
+);
+
+server.registerTool(
+  "get_weather_forecast",
+  {
+    description: "Get the weather forecast for the athlete's location, for planning outdoor sessions.",
+    inputSchema: { athlete_id: athleteIdParam },
+  },
+  async ({ athlete_id }) => textResult(await intervals.getWeatherForecast(creds(athlete_id))),
+);
+
+server.registerTool(
+  "update_activity",
+  {
+    description: "Update a completed activity's name, type or description/notes.",
+    inputSchema: {
+      activity_id: z.string(),
+      name: z.string().optional(),
+      type: z.string().optional().describe("e.g. Ride, Run, Swim"),
+      description: z.string().optional(),
+      athlete_id: athleteIdParam,
+    },
+  },
+  async ({ activity_id, athlete_id, ...fields }) =>
+    textResult(await intervals.updateActivity(creds(athlete_id), activity_id, fields)),
+);
+
+server.registerPrompt(
+  "plan_race",
+  {
+    description: "Analyze fitness and generate the first periodized training block toward a goal race.",
+    argsSchema: {
+      sport: z.string().describe("triathlon | running | cycling | swimming"),
+      distance: z.string().describe("e.g. 10k, marathon, 70.3, olympic, sprint, 1500m"),
+      race_date: z.string().describe("Race date, YYYY-MM-DD"),
+      notes: z.string().optional().describe("Available days, injuries, other constraints"),
+    },
+  },
+  (args) => planRace(args),
+);
+
+server.registerPrompt(
+  "next_block",
+  {
+    description: "Generate the next training block, adapted to what was actually completed and current form.",
+    argsSchema: { notes: z.string().optional().describe("Any updates or constraints") },
+  },
+  (args) => nextBlock(args),
+);
+
+server.registerPrompt(
+  "analyze_form",
+  {
+    description: "Concise weekly form check-in (fitness/fatigue/form/recovery). Read-only, no calendar writes.",
+    argsSchema: { notes: z.string().optional() },
+  },
+  (args) => analyzeForm(args),
 );
 
 const transport = new StdioServerTransport();

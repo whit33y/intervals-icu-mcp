@@ -46,8 +46,25 @@ Each person using this reuses the same code and just sets their own `.env` with 
 - `get_activity` — full detail of one activity
 - `list_wellness` — sleep/HRV/RHR for recovery assessment
 - `list_events` — calendar (planned + completed workouts)
-- `create_event` — add a planned workout (structured intervals via `description`, e.g. `- 10m warmup Z1\n- 4x (5m Z4, 3m Z1)\n- 10m cooldown Z1`)
+- `create_event` — add a planned workout (structured intervals via `description`, e.g. `- 10m warmup Z1\n- 4x (5m Z4, 3m Z1)\n- 10m cooldown Z1`; `category` defaults to `WORKOUT`, use `RACE_A`/`RACE_B` for goal races)
+- `create_events` — add many planned workouts at once (a whole training block) in one call
 - `update_event` — edit a planned workout
 - `delete_event` — remove a calendar entry
+- `get_sport_settings` — FTP, threshold pace, LTHR and training zones per sport
+- `get_activity_intervals` — interval/lap breakdown of an activity (execution vs target)
+- `get_athlete_curves` — best-effort power/pace/HR curve over a period (fitness benchmark)
+- `log_wellness` — log daily wellness (weight, RHR, HRV, sleep, fatigue…)
+- `mark_event_done` — mark a planned workout as completed
+- `get_athlete_summary` — aggregate training stats over a period
+- `get_weather_forecast` — forecast for planning outdoor sessions
+- `update_activity` — edit a completed activity's name/type/notes
 
 All tools accept an optional `athlete_id` to override the `.env` default.
+
+## Prompts (slash commands in Claude Desktop)
+
+These guide the model through analysis → periodized plan → calendar using the tools above. The planning logic lives in the model, not in the server.
+
+- `/plan_race` — args `sport` (triathlon/running/cycling/swimming), `distance` (e.g. `70.3`, `marathon`, `10k`), `race_date` (YYYY-MM-DD), optional `notes`. Reads your zones and current form, creates the race as a `RACE_A` goal, and generates the **first 3–4 week block** onto your calendar.
+- `/next_block` — optional `notes`. Looks at what you actually completed vs. planned and your recomputed form, then generates the next 3–4 week block toward the same race. Run it after finishing each block.
+- `/analyze_form` — optional `notes`. Read-only weekly check-in: fitness (CTL), fatigue (ATL), form (TSB), ramp rate, recovery trend + one recommendation.
