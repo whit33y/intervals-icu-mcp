@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import * as intervals from "./intervals-client.js";
 import type { IntervalsCreds } from "./intervals-client.js";
-import { planRace, nextBlock, analyzeForm } from "./prompts.js";
+import { planRace, nextBlock, analyzeForm, analyzeTrainings } from "./prompts.js";
 
 config({ path: join(dirname(fileURLToPath(import.meta.url)), "..", ".env"), quiet: true });
 
@@ -31,6 +31,8 @@ function textResult(data: unknown) {
 
 const athleteIdParam = z.string().optional().describe("Override athlete id, defaults to INTERVALS_ATHLETE_ID");
 const dateParam = z.string().describe("Date in YYYY-MM-DD format");
+
+const isoDaysAgo = (n: number) => new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
 
 const server = new McpServer({ name: "intervals-icu-mcp", version: "1.0.0" });
 
@@ -289,7 +291,22 @@ server.registerPrompt(
       notes: z.string().optional().describe("Available days, injuries, other constraints"),
     },
   },
-  (args) => planRace(args),
+  async (args) => {
+    const c = creds();
+    let ctx = null;
+    try {
+      const [athlete, sportSettings, activities, wellness] = await Promise.all([
+        intervals.getAthlete(c),
+        intervals.getSportSettings(c),
+        intervals.listActivities(c, isoDaysAgo(56), undefined, 60),
+        intervals.listWellness(c, isoDaysAgo(21)),
+      ]);
+      ctx = { athlete, sportSettings, activities, wellness };
+    } catch {
+      // offline / API error: fall back to the instruction-only prompt (model fetches via tools)
+    }
+    return planRace(args, ctx);
+  },
 );
 
 server.registerPrompt(
@@ -298,7 +315,23 @@ server.registerPrompt(
     description: "Generate the next training block, adapted to what was actually completed and current form.",
     argsSchema: { notes: z.string().optional().describe("Any updates or constraints") },
   },
-  (args) => nextBlock(args),
+  async (args) => {
+    const c = creds();
+    let ctx = null;
+    try {
+      const [athlete, sportSettings, activities, wellness, events] = await Promise.all([
+        intervals.getAthlete(c),
+        intervals.getSportSettings(c),
+        intervals.listActivities(c, isoDaysAgo(35), undefined, 40),
+        intervals.listWellness(c, isoDaysAgo(21)),
+        intervals.listEvents(c, isoDaysAgo(35), isoDaysAgo(-365)),
+      ]);
+      ctx = { athlete, sportSettings, activities, wellness, events };
+    } catch {
+      // offline / API error: fall back to the instruction-only prompt
+    }
+    return nextBlock(args, ctx);
+  },
 );
 
 server.registerPrompt(
@@ -307,7 +340,73 @@ server.registerPrompt(
     description: "Concise weekly form check-in (fitness/fatigue/form/recovery). Read-only, no calendar writes.",
     argsSchema: { notes: z.string().optional() },
   },
-  (args) => analyzeForm(args),
+  async (args) => {
+    const c = creds();
+    let ctx = null;
+    try {
+      const [athlete, activities, wellness] = await Promise.all([
+        intervals.getAthlete(c),
+        intervals.listActivities(c, isoDaysAgo(28), undefined, 30),
+        intervals.listWellness(c, isoDaysAgo(21)),
+      ]);
+      ctx = { athlete, activities, wellness };
+    } catch {
+      // offline / API error: fall back to the instruction-only prompt
+    }
+    return analyzeForm(args, ctx);
+  },
+);
+
+server.registerPrompt(
+  "analyze_trainings",
+  {
+    description:
+      "Analyze completed training(s) and give actionable feedback. range: session (last workout, incl. per-interval execution) | week (last 7 days) | month (last 30 days). Read-only, no calendar writes.",
+    argsSchema: {
+      range: z.enum(["session", "week", "month"]).optional().describe("session | week (default) | month"),
+      notes: z.string().optional(),
+    },
+  },
+  async (args) => {
+    const c = creds();
+    const range = args.range ?? "week";
+    let ctx = null;
+    try {
+      if (range === "session") {
+        const acts = await intervals.listActivities(c, isoDaysAgo(60), undefined, 1);
+        const last = Array.isArray(acts) ? acts[0] : undefined;
+        const activityIntervals =
+          last && typeof last.id === "string" ? await intervals.getActivityIntervals(c, last.id) : undefined;
+        ctx = { activityDetail: last, activityIntervals };
+      } else {
+        const days = range === "month" ? 30 : 7;
+        const [activities, summary] = await Promise.all([
+          intervals.listActivities(c, isoDaysAgo(days), undefined, 100),
+          intervals.getAthleteSummary(c, isoDaysAgo(days)),
+        ]);
+        let lapsById: Record<string, unknown> | undefined;
+        if (range === "week") {
+          // pre-fetch each session's laps in parallel; month stays on-demand to avoid token bloat
+          const acts = Array.isArray(activities) ? activities : [];
+          const pairs = await Promise.all(
+            acts.map((a: any) =>
+              typeof a?.id === "string"
+                ? intervals
+                    .getActivityIntervals(c, a.id)
+                    .then((iv) => [a.id, iv] as const)
+                    .catch(() => null)
+                : null,
+            ),
+          );
+          lapsById = Object.fromEntries(pairs.filter((p): p is readonly [string, unknown] => p !== null));
+        }
+        ctx = { detailedActivities: activities, summary, lapsById };
+      }
+    } catch {
+      // offline / API error: fall back to the instruction-only prompt
+    }
+    return analyzeTrainings({ ...args, range }, ctx);
+  },
 );
 
 const transport = new StdioServerTransport();
