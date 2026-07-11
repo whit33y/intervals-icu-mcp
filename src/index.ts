@@ -16,7 +16,7 @@ const defaultAthleteId = process.env.INTERVALS_ATHLETE_ID;
 
 function creds(athleteId?: string): IntervalsCreds {
   if (!defaultApiKey) {
-    throw new Error("Missing INTERVALS_API_KEY env var. Set it in your .env file.");
+    throw new Error("Missing INTERVALS_API_KEY. Set it in the extension config (or .env).");
   }
   const id = athleteId ?? defaultAthleteId;
   if (!id) {
@@ -292,9 +292,9 @@ server.registerPrompt(
     },
   },
   async (args) => {
-    const c = creds();
     let ctx = null;
     try {
+      const c = creds();
       const [athlete, sportSettings, activities, wellness] = await Promise.all([
         intervals.getAthlete(c),
         intervals.getSportSettings(c),
@@ -316,9 +316,9 @@ server.registerPrompt(
     argsSchema: { notes: z.string().optional().describe("Any updates or constraints") },
   },
   async (args) => {
-    const c = creds();
     let ctx = null;
     try {
+      const c = creds();
       const [athlete, sportSettings, activities, wellness, events] = await Promise.all([
         intervals.getAthlete(c),
         intervals.getSportSettings(c),
@@ -341,9 +341,9 @@ server.registerPrompt(
     argsSchema: { notes: z.string().optional() },
   },
   async (args) => {
-    const c = creds();
     let ctx = null;
     try {
+      const c = creds();
       const [athlete, activities, wellness] = await Promise.all([
         intervals.getAthlete(c),
         intervals.listActivities(c, isoDaysAgo(28), undefined, 30),
@@ -368,10 +368,10 @@ server.registerPrompt(
     },
   },
   async (args) => {
-    const c = creds();
     const range = args.range ?? "week";
     let ctx = null;
     try {
+      const c = creds();
       if (range === "session") {
         const acts = await intervals.listActivities(c, isoDaysAgo(60), undefined, 1);
         const last = Array.isArray(acts) ? acts[0] : undefined;
@@ -416,9 +416,9 @@ server.registerPrompt(
     argsSchema: { notes: z.string().optional().describe("Anything about how you feel or your day") },
   },
   async (args) => {
-    const c = creds();
     let ctx = null;
     try {
+      const c = creds();
       const today = isoDaysAgo(0);
       const [events, wellness] = await Promise.all([
         intervals.listEvents(c, today, today),
@@ -439,9 +439,9 @@ server.registerPrompt(
     argsSchema: { notes: z.string().optional().describe("Free text: sleep, weight, how you feel, resting HR, HRV…") },
   },
   async (args) => {
-    const c = creds();
     let ctx = null;
     try {
+      const c = creds();
       const today = isoDaysAgo(0);
       ctx = { wellness: await intervals.listWellness(c, today, today) };
     } catch {

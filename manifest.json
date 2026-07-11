@@ -16,6 +16,45 @@
       }
     }
   },
+  "prompts": [
+    {
+      "name": "plan_race",
+      "description": "Analyze fitness and generate the first periodized training block toward a goal race.",
+      "arguments": ["sport", "distance", "race_date", "notes"],
+      "text": "Build a periodized training plan for a ${arguments.sport} ${arguments.distance} on ${arguments.race_date}. ${arguments.notes}"
+    },
+    {
+      "name": "next_block",
+      "description": "Generate the next training block, adapted to what was actually completed and current form.",
+      "arguments": ["notes"],
+      "text": "Continue the race plan with the next 3-4 week block, adapted to what actually happened. ${arguments.notes}"
+    },
+    {
+      "name": "analyze_form",
+      "description": "Concise weekly form check-in (fitness/fatigue/form/recovery). Read-only, no calendar writes.",
+      "arguments": ["notes"],
+      "text": "Give a concise weekly form check-in (fitness, fatigue, form, recovery). ${arguments.notes}"
+    },
+    {
+      "name": "analyze_trainings",
+      "description": "Analyze completed training(s) and give actionable feedback. range: session | week | month. Read-only.",
+      "arguments": ["range", "notes"],
+      "text": "Analyze the athlete's training over the ${arguments.range} and give actionable feedback. ${arguments.notes}"
+    },
+    {
+      "name": "todays_workout",
+      "description": "What should I do today? Explains today's planned session (or suggests one), factoring in form and weather. Read-only.",
+      "arguments": ["notes"],
+      "text": "Tell me what to do today, factoring in form and weather. ${arguments.notes}"
+    },
+    {
+      "name": "log_today",
+      "description": "Log today's wellness from a plain-language note. Writes via log_wellness.",
+      "arguments": ["notes"],
+      "text": "Log today's wellness from this note: ${arguments.notes}"
+    }
+  ],
+  "prompts_generated": true,
   "user_config": {
     "api_key": {
       "type": "string",
