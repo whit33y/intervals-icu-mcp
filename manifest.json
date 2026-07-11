@@ -1,0 +1,34 @@
+{
+  "manifest_version": "0.1",
+  "name": "intervals-icu-mcp",
+  "version": "1.0.0",
+  "description": "intervals.icu: analyze training history and plan/schedule workouts.",
+  "author": { "name": "whit33y" },
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/dist/index.js"],
+      "env": {
+        "INTERVALS_API_KEY": "${user_config.api_key}",
+        "INTERVALS_ATHLETE_ID": "${user_config.athlete_id}"
+      }
+    }
+  },
+  "user_config": {
+    "api_key": {
+      "type": "string",
+      "title": "intervals.icu API Key",
+      "description": "intervals.icu -> Settings -> Developer",
+      "sensitive": true,
+      "required": true
+    },
+    "athlete_id": {
+      "type": "string",
+      "title": "Athlete ID",
+      "description": "e.g. i632406 (intervals.icu -> Settings)",
+      "required": true
+    }
+  }
+}

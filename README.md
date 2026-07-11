@@ -39,6 +39,44 @@ Add to your MCP config (`claude mcp add` or the client's `mcpServers` JSON):
 
 Each person using this reuses the same code and just sets their own `.env` with their own API key/athlete id.
 
+## One-click install for non-technical users (.mcpb)
+
+Claude Desktop can install this as a bundle (MCPB, formerly "Desktop Extensions"). The user
+double-clicks a `.mcpb` file, gets a **settings form**, pastes their API key + athlete id, and Claude
+Desktop injects them as env vars — no cloning, no `.env`, no JSON editing.
+
+Build the bundle once:
+
+```bash
+npm run pack        # build → prod install → produces intervals-icu-mcp.mcpb
+```
+
+Then share the `intervals-icu-mcp.mcpb` file. Each user drags it into Claude Desktop → Settings →
+Extensions and fills in the form. Config lives in `manifest.json` (`user_config` → `env` mapping).
+
+<!--
+  Alternative distribution — publish to npm (public) instead of sharing a .mcpb.
+  Then users add this to their MCP config (no clone/build/absolute paths), pasting only their creds:
+
+  {
+    "mcpServers": {
+      "intervals-icu": {
+        "command": "npx",
+        "args": ["-y", "intervals-icu-mcp"],
+        "env": {
+          "INTERVALS_API_KEY": "your_api_key_here",
+          "INTERVALS_ATHLETE_ID": "i00000"
+        }
+      }
+    }
+  }
+
+  Requires `npm publish` (a public package). The .mcpb path above needs no registry.
+-->
+
+Note: passing creds via the config `env` block (as above) works for the plain `node` setup too — you
+don't strictly need a `.env` file if you set `INTERVALS_API_KEY` / `INTERVALS_ATHLETE_ID` there.
+
 ## Tools
 
 - `get_athlete` — profile, current fitness (CTL/ATL/form)
@@ -68,3 +106,6 @@ These guide the model through analysis → periodized plan → calendar using th
 - `/plan_race` — args `sport` (triathlon/running/cycling/swimming), `distance` (e.g. `70.3`, `marathon`, `10k`), `race_date` (YYYY-MM-DD), optional `notes`. Reads your zones and current form, creates the race as a `RACE_A` goal, and generates the **first 3–4 week block** onto your calendar.
 - `/next_block` — optional `notes`. Looks at what you actually completed vs. planned and your recomputed form, then generates the next 3–4 week block toward the same race. Run it after finishing each block.
 - `/analyze_form` — optional `notes`. Read-only weekly check-in: fitness (CTL), fatigue (ATL), form (TSB), ramp rate, recovery trend + one recommendation.
+- `/analyze_trainings` — optional `range` (`session`/`week`/`month`) + `notes`. Read-only analysis of completed training with actionable feedback (per-interval execution for `session`).
+- `/todays_workout` — optional `notes`. "What should I do today?" Explains today's planned session (or suggests one) in plain language, factoring in current form and, for outdoor sessions, the weather. Read-only.
+- `/log_today` — `notes` free text (e.g. `slept 7h, tired, weight 72`). Logs today's wellness by parsing the note into fields and calling `log_wellness`. The only prompt that writes.

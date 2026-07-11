@@ -277,3 +277,34 @@ ${
 Finish with 2-3 concrete takeaways and ONE recommendation for the next few days.`,
   );
 }
+
+export function todaysWorkout(args: { notes?: string }, ctx?: PromptContext | null) {
+  const { notes } = args;
+  return userText(
+    `Tell the athlete what to do today, in plain language. Read-only — do not write anything to the calendar.
+
+${contextBlock(ctx)}${notes ? `Athlete notes: ${notes}\n` : ""}
+Use the PRE-FETCHED CONTEXT above:
+- calendar_events: today's planned session(s), if any (call list_events for today only if it's missing).
+- form_and_recovery: current CTL (fitness), ATL (fatigue), TSB (form) and the sleep / HRV / resting HR trend.
+Then:
+- If a session is planned today, explain it simply: what to do, roughly how long/hard, and why it fits today's form. Break the workout structure into plain steps.
+- If nothing is planned, suggest a sensible session (or rest) based on form and recovery — one clear recommendation, not a menu.
+- For an outdoor session, call get_weather_forecast and factor it in (rain, wind, heat) — e.g. suggest moving it indoors or adjusting timing.
+Keep it short and encouraging. No calendar changes.`,
+  );
+}
+
+export function logToday(args: { notes?: string }, ctx?: PromptContext | null) {
+  const { notes } = args;
+  return userText(
+    `Log the athlete's wellness for TODAY from their free-text note, then confirm.
+
+${contextBlock(ctx)}Athlete note: ${notes ?? "(none given — ask what to log)"}
+Steps:
+1. Parse the note into wellness fields: weight (kg), restingHR, hrv, sleepSecs (convert hours→seconds), sleepQuality/fatigue/soreness/stress/mood/motivation (1=best … 4=worst), spO2, comments. Only include what the note actually mentions.
+2. Today's existing entry (if any) is in form_and_recovery above — you're updating it, so don't wipe fields the note doesn't mention (log_wellness only sends the fields you pass).
+3. Call log_wellness with date = today and the parsed fields.
+4. Confirm back in one line what you logged. If the note is empty or unclear, ask what to log instead of guessing.`,
+  );
+}

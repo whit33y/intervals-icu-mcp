@@ -1,6 +1,6 @@
 // ponytail: single self-check for the trim/embed logic. Run: node src/prompts.test.mjs (after build)
 import assert from "node:assert";
-import { analyzeForm, planRace, analyzeTrainings } from "../dist/prompts.js";
+import { analyzeForm, planRace, analyzeTrainings, todaysWorkout, logToday } from "../dist/prompts.js";
 
 const ctx = {
   athlete: { name: "Kuba", sex: "M", icu_resting_hr: 48, icu_weight: 72.34 },
@@ -78,5 +78,27 @@ assert.match(week, /last 7 days/, "week scope text");
 const trFb = analyzeTrainings({ range: "month" }, null).messages[0].content.text;
 assert.ok(!trFb.includes("already loaded for you"), "no data block when ctx null");
 assert.match(trFb, /last 30 days/, "month scope text in fallback");
+
+// todays_workout: embeds today's calendar + form, read-only, tells model to check weather
+const tw = todaysWorkout({}, {
+  events: [{ id: "e1", start_date_local: "2026-07-11", name: "Threshold 4x5", category: "WORKOUT", type: "Ride", moving_time: 3600 }],
+  wellness: [{ id: "2026-07-11", ctl: 45.6, atl: 52.1, restingHR: 47, hrv: 48, sleepSecs: 25800 }],
+}).messages[0].content.text;
+assert.match(tw, /"calendar_events"/, "today's events embedded");
+assert.match(tw, /"name": "Threshold 4x5"/, "planned session name embedded");
+assert.match(tw, /get_weather_forecast/, "tells model to check weather for outdoor");
+assert.match(tw, /do not write anything to the calendar/i, "read-only");
+// fallback with no ctx still gives instructions
+assert.match(todaysWorkout({}, null).messages[0].content.text, /what to do today/i, "fallback instructions present");
+
+// log_today: parses the note and calls log_wellness for today; embeds existing entry to avoid wiping
+const lt = logToday({ notes: "slept 7h, tired, weight 72" }, {
+  wellness: [{ id: "2026-07-11", restingHR: 47 }],
+}).messages[0].content.text;
+assert.match(lt, /slept 7h, tired, weight 72/, "athlete note embedded");
+assert.match(lt, /log_wellness/, "instructs to call log_wellness");
+assert.match(lt, /form_and_recovery/, "existing entry embedded so fields aren't wiped");
+// empty note => ask instead of guessing
+assert.match(logToday({}, null).messages[0].content.text, /ask what to log/i, "asks when note missing");
 
 console.log("OK");

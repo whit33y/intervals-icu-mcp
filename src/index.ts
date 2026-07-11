@@ -7,7 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import * as intervals from "./intervals-client.js";
 import type { IntervalsCreds } from "./intervals-client.js";
-import { planRace, nextBlock, analyzeForm, analyzeTrainings } from "./prompts.js";
+import { planRace, nextBlock, analyzeForm, analyzeTrainings, todaysWorkout, logToday } from "./prompts.js";
 
 config({ path: join(dirname(fileURLToPath(import.meta.url)), "..", ".env"), quiet: true });
 
@@ -406,6 +406,48 @@ server.registerPrompt(
       // offline / API error: fall back to the instruction-only prompt
     }
     return analyzeTrainings({ ...args, range }, ctx);
+  },
+);
+
+server.registerPrompt(
+  "todays_workout",
+  {
+    description: "What should I do today? Explains today's planned session (or suggests one) in plain language, factoring in form and weather. Read-only.",
+    argsSchema: { notes: z.string().optional().describe("Anything about how you feel or your day") },
+  },
+  async (args) => {
+    const c = creds();
+    let ctx = null;
+    try {
+      const today = isoDaysAgo(0);
+      const [events, wellness] = await Promise.all([
+        intervals.listEvents(c, today, today),
+        intervals.listWellness(c, isoDaysAgo(14)),
+      ]);
+      ctx = { events, wellness };
+    } catch {
+      // offline / API error: fall back to the instruction-only prompt
+    }
+    return todaysWorkout(args, ctx);
+  },
+);
+
+server.registerPrompt(
+  "log_today",
+  {
+    description: "Log today's wellness from a plain-language note, e.g. 'slept 7h, tired, weight 72'. Writes via log_wellness.",
+    argsSchema: { notes: z.string().optional().describe("Free text: sleep, weight, how you feel, resting HR, HRV…") },
+  },
+  async (args) => {
+    const c = creds();
+    let ctx = null;
+    try {
+      const today = isoDaysAgo(0);
+      ctx = { wellness: await intervals.listWellness(c, today, today) };
+    } catch {
+      // offline / API error: fall back to the instruction-only prompt
+    }
+    return logToday(args, ctx);
   },
 );
 
