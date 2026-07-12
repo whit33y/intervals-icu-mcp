@@ -2,6 +2,12 @@
 
 MCP server wrapping the [intervals.icu](https://intervals.icu) API: review training history, plan workouts, and add them to your calendar. If you've linked Garmin Connect in your intervals.icu account settings (Settings → Garmin), planned workouts you create here sync to your Garmin device automatically — no separate Garmin integration needed.
 
+## Get your intervals.icu account & credentials
+
+1. **Create an account** — go to [intervals.icu](https://www.intervals.icu/), click **Sign up free**, and finish onboarding.
+2. **Connect Garmin** (so activities import and planned workouts sync to your device) — **Settings → Connections → Garmin**, log in, and grant **all permissions**.
+3. **Get your API key & athlete id** — **Settings → Developer**. Copy the **API Key** and your **Athlete ID** (shown on that page, format `i123456`). These are the two values that go in your `.env` / the install form.
+
 ## Setup
 
 ```bash
@@ -51,8 +57,22 @@ Build the bundle once:
 npm run pack        # build → prod install → produces intervals-icu-mcp.mcpb
 ```
 
-Then share the `intervals-icu-mcp.mcpb` file. Each user drags it into Claude Desktop → Settings →
-Extensions and fills in the form. Config lives in `manifest.json` (`user_config` → `env` mapping).
+Then share the `intervals-icu-mcp.mcpb` file. Config lives in `manifest.json` (`user_config` → `env` mapping).
+
+**Install the extension:**
+
+1. Open Claude Desktop
+2. **Settings → Extensions → Advanced settings**
+3. **Install extension** → pick the `intervals-icu-mcp.mcpb` file → **Install**
+4. Paste your API key + athlete id in the form
+5. **Enable** the extension
+6. Allow permissions when prompted
+
+**Use it in a chat:**
+
+1. Click **+** in the chat box
+2. **Connectors → Add from intervals-icu**
+3. Select a skill / tool
 
 <!--
   Alternative distribution — publish to npm (public) instead of sharing a .mcpb.
