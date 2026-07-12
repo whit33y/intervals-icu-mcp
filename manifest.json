@@ -58,14 +58,14 @@
   "user_config": {
     "api_key": {
       "type": "string",
-      "title": "intervals.icu API Key",
+      "title": "Add your intervals.icu API Key",
       "description": "intervals.icu -> Settings -> Developer",
       "sensitive": true,
       "required": true
     },
     "athlete_id": {
       "type": "string",
-      "title": "Athlete ID",
+      "title": "Add your Athlete ID",
       "description": "e.g. i632406 (intervals.icu -> Settings)",
       "required": true
     }
