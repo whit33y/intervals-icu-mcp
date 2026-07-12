@@ -24,6 +24,15 @@ function userText(text: string) {
 const obj = (x: unknown): Record<string, any> => (x && typeof x === "object" ? (x as any) : {});
 const arr = (x: unknown): any[] => (Array.isArray(x) ? x : []);
 const r1 = (x: unknown): number | undefined => (typeof x === "number" ? Math.round(x * 10) / 10 : undefined);
+// seconds -> "h:mm:ss" (>=1h) or "m:ss.s" (<1h, tenths; API is whole seconds so .0)
+const fmtDur = (secs: unknown): string | undefined => {
+  if (typeof secs !== "number" || !isFinite(secs) || secs < 0) return undefined;
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  const p2 = (n: number) => String(Math.floor(n)).padStart(2, "0");
+  return h > 0 ? `${h}:${p2(m)}:${p2(Math.floor(s))}` : `${m}:${p2(s)}.${Math.floor((s % 1) * 10)}`;
+};
 
 function trimWellness(wellness: unknown) {
   const days = arr(wellness);
@@ -39,7 +48,7 @@ function trimWellness(wellness: unknown) {
       rampRate: r1(w.rampRate),
       restingHR: w.restingHR,
       hrv: w.hrv,
-      sleepHrs: typeof w.sleepSecs === "number" ? r1(w.sleepSecs / 3600) : undefined,
+      sleep: fmtDur(w.sleepSecs),
     };
   };
   return { latest: pick(days[days.length - 1]), trend: days.map(pick) };
@@ -50,7 +59,7 @@ function trimActivities(activities: unknown) {
     date: a.start_date_local,
     type: a.type,
     name: a.name,
-    minutes: typeof a.moving_time === "number" ? Math.round(a.moving_time / 60) : undefined,
+    duration: fmtDur(a.moving_time),
     load: a.icu_training_load,
     km: typeof a.distance === "number" ? r1(a.distance / 1000) : undefined,
   }));
@@ -88,7 +97,7 @@ function trimActivityDetail(activity: unknown) {
     date: a.start_date_local,
     type: a.type,
     name: a.name,
-    minutes: typeof a.moving_time === "number" ? Math.round(a.moving_time / 60) : undefined,
+    duration: fmtDur(a.moving_time),
     km: typeof a.distance === "number" ? r1(a.distance / 1000) : undefined,
     load: a.icu_training_load,
     intensityPct: r1(a.icu_intensity), // IF% = NP / FTP
@@ -127,7 +136,7 @@ function trimIntervals(activityIntervals: unknown) {
   const list = arr(obj(activityIntervals).icu_intervals).map((i: any) => ({
     label: i.label,
     type: i.type,
-    minutes: typeof i.moving_time === "number" ? r1(i.moving_time / 60) : undefined,
+    duration: fmtDur(i.moving_time),
     meters: typeof i.distance === "number" ? Math.round(i.distance) : undefined,
     kmh: typeof i.average_speed === "number" ? r1(i.average_speed * 3.6) : undefined, // pace for run/swim laps
     avgW: i.average_watts,
@@ -147,7 +156,7 @@ function trimSummary(summary: unknown) {
   const list = arr(summary).map((s: any) => ({
     date: s.date,
     count: s.count,
-    hours: typeof s.moving_time === "number" ? r1(s.moving_time / 3600) : undefined,
+    duration: fmtDur(s.moving_time),
     km: typeof s.distance === "number" ? r1(s.distance / 1000) : undefined,
     load: s.training_load,
     elevGain: s.total_elevation_gain,
@@ -166,7 +175,7 @@ function trimEvents(events: unknown) {
     name: e.name,
     category: e.category,
     type: e.type,
-    minutes: typeof e.moving_time === "number" ? Math.round(e.moving_time / 60) : undefined,
+    duration: fmtDur(e.moving_time),
   }));
   return list.length ? list : undefined;
 }
@@ -188,7 +197,7 @@ function contextBlock(ctx: PromptContext | null | undefined): string {
   // drop undefined top-level keys so the block only shows what was actually fetched
   const filled = Object.fromEntries(Object.entries(trimmed).filter(([, v]) => v !== undefined));
   if (!Object.keys(filled).length) return "";
-  return `PRE-FETCHED CONTEXT (already loaded for you — CTL=fitness, ATL=fatigue, TSB=form; use these instead of re-fetching, only call read tools if you need more detail):
+  return `PRE-FETCHED CONTEXT (already loaded for you — CTL=fitness, ATL=fatigue, TSB=form; use these instead of re-fetching, only call read tools if you need more detail). Durations (duration/sleep) are pre-formatted as hh:mm:ss, or mm:ss.s under an hour; when a tool returns a raw duration in seconds, show it to the athlete in that same format, never as decimal minutes:
 ${JSON.stringify(filled, null, 2)}
 
 `;

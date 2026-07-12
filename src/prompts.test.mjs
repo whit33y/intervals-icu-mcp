@@ -16,8 +16,8 @@ const text = analyzeForm({}, ctx).messages[0].content.text;
 assert.match(text, /"date": "2026-07-11"/, "uses latest wellness day");
 assert.match(text, /"ctl": 45.6/, "rounds ctl");
 assert.match(text, /"tsb": -6.5/, "tsb = ctl - atl = 45.6 - 52.1");
-assert.match(text, /"sleepHrs": 7.2/, "25800s -> 7.2h");
-assert.match(text, /"minutes": 60/, "moving_time seconds -> minutes");
+assert.match(text, /"sleep": "7:10:00"/, "25800s -> 7:10:00");
+assert.match(text, /"duration": "1:00:00"/, "3600s -> 1:00:00");
 assert.match(text, /"km": 30.1/, "distance meters -> km");
 assert.match(text, /PRE-FETCHED CONTEXT/, "embeds context block");
 
@@ -50,6 +50,7 @@ assert.match(session, /"intensityPct": 68.8/, "IF% from icu_intensity");
 assert.match(session, /"np": 205/, "normalized power");
 assert.match(session, /"kmh": 31.5/, "speed m/s -> km/h");
 assert.match(session, /"label": "Warmup"/, "interval label embedded");
+assert.match(session, /"duration": "10:00.0"/, "600s interval -> mm:ss.s");
 assert.match(session, /"meters": 150/, "lap distance embedded");
 assert.match(session, /"kmh": 12/, "lap speed embedded");
 assert.match(session, /the single most recent workout/, "session scope text");
