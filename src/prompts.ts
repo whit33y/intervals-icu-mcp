@@ -3,29 +3,40 @@
 // Prompts pre-fetch read-only context (athlete/wellness/activities/...) and embed a trimmed
 // version so the model starts with the numbers instead of spending turns on tool round-trips.
 
+import type {
+  Athlete,
+  Activity,
+  WellnessRecord,
+  CalendarEvent,
+  SportSettings,
+  ActivityIntervals,
+  Interval,
+  SummaryRow,
+} from "./intervals-types.js";
+
 export interface PromptContext {
-  athlete?: unknown;
-  activities?: unknown;
-  wellness?: unknown;
-  sportSettings?: unknown;
-  events?: unknown;
-  activityDetail?: unknown;
-  activityIntervals?: unknown;
-  detailedActivities?: unknown;
-  lapsById?: unknown; // map activity id -> its get_activity_intervals response (week range)
-  summary?: unknown;
+  athlete?: Athlete;
+  activities?: Activity[];
+  wellness?: WellnessRecord[];
+  sportSettings?: SportSettings[];
+  events?: CalendarEvent[];
+  activityDetail?: Activity;
+  activityIntervals?: ActivityIntervals;
+  detailedActivities?: Activity[];
+  lapsById?: Record<string, ActivityIntervals>; // map activity id -> its get_activity_intervals response (week range)
+  summary?: SummaryRow[];
 }
 
 function userText(text: string) {
   return { messages: [{ role: "user" as const, content: { type: "text" as const, text } }] };
 }
 
-// --- trimming helpers (data from the API is `unknown`; pick key fields, tolerate missing) ---
-const obj = (x: unknown): Record<string, any> => (x && typeof x === "object" ? (x as any) : {});
-const arr = (x: unknown): any[] => (Array.isArray(x) ? x : []);
-const r1 = (x: unknown): number | undefined => (typeof x === "number" ? Math.round(x * 10) / 10 : undefined);
+// --- trimming helpers (responses are cast, not validated; tolerate missing arrays/fields) ---
+const arr = <T>(x: T[] | undefined): T[] => (Array.isArray(x) ? x : []);
+const r1 = (x: number | undefined): number | undefined =>
+  typeof x === "number" ? Math.round(x * 10) / 10 : undefined;
 // seconds -> "h:mm:ss" (>=1h) or "m:ss.s" (<1h, tenths; API is whole seconds so .0)
-const fmtDur = (secs: unknown): string | undefined => {
+const fmtDur = (secs: number | undefined): string | undefined => {
   if (typeof secs !== "number" || !isFinite(secs) || secs < 0) return undefined;
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
@@ -34,10 +45,10 @@ const fmtDur = (secs: unknown): string | undefined => {
   return h > 0 ? `${h}:${p2(m)}:${p2(Math.floor(s))}` : `${m}:${p2(s)}.${Math.floor((s % 1) * 10)}`;
 };
 
-function trimWellness(wellness: unknown) {
+function trimWellness(wellness?: WellnessRecord[]) {
   const days = arr(wellness);
   if (!days.length) return undefined;
-  const pick = (w: any) => {
+  const pick = (w: WellnessRecord) => {
     const ctl = r1(w.ctl);
     const atl = r1(w.atl);
     return {
@@ -54,8 +65,8 @@ function trimWellness(wellness: unknown) {
   return { latest: pick(days[days.length - 1]), trend: days.map(pick) };
 }
 
-function trimActivities(activities: unknown) {
-  const list = arr(activities).map((a: any) => ({
+function trimActivities(activities?: Activity[]) {
+  const list = arr(activities).map((a) => ({
     date: a.start_date_local,
     type: a.type,
     name: a.name,
@@ -66,15 +77,15 @@ function trimActivities(activities: unknown) {
   return list.length ? list : undefined;
 }
 
-function trimAthlete(athlete: unknown) {
-  const a = obj(athlete);
+function trimAthlete(athlete?: Athlete) {
+  const a = athlete ?? {};
   const name = a.name ?? `${a.firstname ?? ""} ${a.lastname ?? ""}`.trim();
   if (!name) return undefined;
   return { name, sex: a.sex, restingHR: a.icu_resting_hr, weightKg: r1(a.icu_weight) };
 }
 
-function trimSportSettings(sportSettings: unknown) {
-  const list = arr(sportSettings).map((s: any) => ({
+function trimSportSettings(sportSettings?: SportSettings[]) {
+  const list = arr(sportSettings).map((s) => ({
     types: s.types,
     ftp: s.ftp,
     indoorFtp: s.indoor_ftp,
@@ -89,8 +100,8 @@ function trimSportSettings(sportSettings: unknown) {
   return list.length ? list : undefined;
 }
 
-function trimActivityDetail(activity: unknown) {
-  const a = obj(activity);
+function trimActivityDetail(activity?: Activity) {
+  const a = activity ?? {};
   if (!a.id && !a.start_date_local) return undefined;
   return {
     id: a.id, // so the model can call get_activity_intervals for this session's laps
@@ -117,13 +128,13 @@ function trimActivityDetail(activity: unknown) {
   };
 }
 
-function trimDetailedActivities(activities: unknown, lapsById?: unknown) {
-  const map = obj(lapsById);
+function trimDetailedActivities(activities?: Activity[], lapsById?: Record<string, ActivityIntervals>) {
+  const map = lapsById ?? {};
   const list = arr(activities)
     .map((a) => {
       const t = trimActivityDetail(a);
       if (t && t.id != null) {
-        const laps = trimIntervals(map[t.id as string]);
+        const laps = trimIntervals(map[t.id]);
         if (laps) return { ...t, laps };
       }
       return t;
@@ -132,8 +143,8 @@ function trimDetailedActivities(activities: unknown, lapsById?: unknown) {
   return list.length ? list : undefined;
 }
 
-function trimIntervals(activityIntervals: unknown) {
-  const list = arr(obj(activityIntervals).icu_intervals).map((i: any) => ({
+function trimIntervals(activityIntervals?: ActivityIntervals) {
+  const list = arr(activityIntervals?.icu_intervals).map((i: Interval) => ({
     label: i.label,
     type: i.type,
     duration: fmtDur(i.moving_time),
@@ -152,8 +163,8 @@ function trimIntervals(activityIntervals: unknown) {
   return list.length ? list : undefined;
 }
 
-function trimSummary(summary: unknown) {
-  const list = arr(summary).map((s: any) => ({
+function trimSummary(summary?: SummaryRow[]) {
+  const list = arr(summary).map((s) => ({
     date: s.date,
     count: s.count,
     duration: fmtDur(s.moving_time),
@@ -168,8 +179,8 @@ function trimSummary(summary: unknown) {
   return list.length ? list : undefined;
 }
 
-function trimEvents(events: unknown) {
-  const list = arr(events).map((e: any) => ({
+function trimEvents(events?: CalendarEvent[]) {
+  const list = arr(events).map((e) => ({
     id: e.id,
     date: e.start_date_local,
     name: e.name,

@@ -7,6 +7,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import * as intervals from "./intervals-client.js";
 import type { IntervalsCreds } from "./intervals-client.js";
+import type { ActivityIntervals } from "./intervals-types.js";
 import { planRace, nextBlock, analyzeForm, analyzeTrainings, todaysWorkout, logToday } from "./prompts.js";
 
 config({ path: join(dirname(fileURLToPath(import.meta.url)), "..", ".env"), quiet: true });
@@ -25,6 +26,7 @@ function creds(athleteId?: string): IntervalsCreds {
   return { apiKey: defaultApiKey, athleteId: id };
 }
 
+// ponytail: serialization sink — accepts any tool's result, unknown is the correct safe type here
 function textResult(data: unknown) {
   return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
@@ -384,12 +386,12 @@ server.registerPrompt(
           intervals.listActivities(c, isoDaysAgo(days), undefined, 100),
           intervals.getAthleteSummary(c, isoDaysAgo(days)),
         ]);
-        let lapsById: Record<string, unknown> | undefined;
+        let lapsById: Record<string, ActivityIntervals> | undefined;
         if (range === "week") {
           // pre-fetch each session's laps in parallel; month stays on-demand to avoid token bloat
           const acts = Array.isArray(activities) ? activities : [];
           const pairs = await Promise.all(
-            acts.map((a: any) =>
+            acts.map((a) =>
               typeof a?.id === "string"
                 ? intervals
                     .getActivityIntervals(c, a.id)
@@ -398,7 +400,9 @@ server.registerPrompt(
                 : null,
             ),
           );
-          lapsById = Object.fromEntries(pairs.filter((p): p is readonly [string, unknown] => p !== null));
+          lapsById = Object.fromEntries(
+            pairs.filter((p): p is readonly [string, ActivityIntervals] => p !== null),
+          );
         }
         ctx = { detailedActivities: activities, summary, lapsById };
       }
