@@ -25,6 +25,7 @@ export interface PromptContext {
   detailedActivities?: Activity[];
   lapsById?: Record<string, ActivityIntervals>; // map activity id -> its get_activity_intervals response (week range)
   summary?: SummaryRow[];
+  equipment?: string; // athlete-declared gear (INTERVALS_EQUIPMENT), not from the API
 }
 
 function userText(text: string) {
@@ -195,6 +196,7 @@ function trimEvents(events?: CalendarEvent[]) {
 function contextBlock(ctx: PromptContext | null | undefined): string {
   if (!ctx) return "";
   const trimmed = {
+    equipment: ctx.equipment || undefined,
     athlete: trimAthlete(ctx.athlete),
     sportSettings: trimSportSettings(ctx.sportSettings),
     form_and_recovery: trimWellness(ctx.wellness),
@@ -234,7 +236,9 @@ Work through these steps, calling the MCP tools as you go:
 6. Generate ONLY the first block (3-4 weeks) of periodized sessions for ${sport}/${distance}:
    - Respect the ramp rate; use roughly a 3:1 build-to-recovery week ratio.
    - For triathlon, balance swim / bike / run across the week.
-   - Express targets in the athlete's own zones from sportSettings so they carry across devices.
+   - Structure every session as clearly named steps/laps (Warmup ramp, named Work/Recovery inside repeats, Cooldown) — not one continuous block.
+   - Pick the target metric per sport from the athlete's gear: use "equipment" above if present (e.g. bike with a power meter → power; run without run-power → pace or HR). If equipment is absent, infer from which sportSettings are populated (ftp+power_zones → power, threshold_pace+pace_zones → pace, lthr+hr_zones → HR); fall back to RPE/feel zones. Express targets in the athlete's own zones so they carry across devices.
+   - Start each session's description with a plain "Gear: ..." line listing what the athlete needs to execute it (from equipment + the chosen metric + indoor/outdoor).
 7. Save the whole block in ONE create_events call. Use the intervals.icu workout syntax in each event's description (see the create_event tool description), set type (Ride/Run/Swim/Workout) and moving_time in seconds.
 8. Summarize the block and remind the athlete: once you finish this block, run /next_block to generate the next one adapted to how it actually went.`,
   );
@@ -251,6 +255,9 @@ Steps:
 2. From form_and_recovery: recomputed CTL/ATL/form/ramp rate.
 3. Find the RACE_A goal in calendar_events to get the race date and weeks remaining (list_events if it's outside the fetched window).
 4. Pick the macro phase for the new position and generate the next 3-4 week periodized block toward that date, adjusting load up or down based on real form and completion — not a dead pre-made plan.
+   - Structure every session as clearly named steps/laps (Warmup ramp, named Work/Recovery inside repeats, Cooldown).
+   - Pick the target metric per sport from "equipment" above if present, else from which sportSettings are populated (power/pace/HR), falling back to RPE.
+   - Start each session's description with a plain "Gear: ..." line listing what the athlete needs to execute it.
 5. Save it in ONE create_events call (workout syntax in description, type, moving_time in seconds).
 6. Summarize and note when to run /next_block again.`,
   );
@@ -308,7 +315,7 @@ Use the PRE-FETCHED CONTEXT above:
 - calendar_events: today's planned session(s), if any (call list_events for today only if it's missing).
 - form_and_recovery: current CTL (fitness), ATL (fatigue), TSB (form) and the sleep / HRV / resting HR trend.
 Then:
-- If a session is planned today, explain it simply: what to do, roughly how long/hard, and why it fits today's form. Break the workout structure into plain steps.
+- If a session is planned today, explain it simply: what to do, roughly how long/hard, and why it fits today's form. Break the workout structure into plain steps, and in one line say what gear to bring for it (from "equipment" above + the session's targets, e.g. power meter, HR belt, smart trainer).
 - If nothing is planned, suggest a sensible session (or rest) based on form and recovery — one clear recommendation, not a menu.
 - For an outdoor session, call get_weather_forecast and factor it in (rain, wind, heat) — e.g. suggest moving it indoors or adjusting timing.
 Keep it short and encouraging. No calendar changes.`,

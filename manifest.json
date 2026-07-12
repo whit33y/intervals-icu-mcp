@@ -12,7 +12,8 @@
       "args": ["${__dirname}/dist/index.js"],
       "env": {
         "INTERVALS_API_KEY": "${user_config.api_key}",
-        "INTERVALS_ATHLETE_ID": "${user_config.athlete_id}"
+        "INTERVALS_ATHLETE_ID": "${user_config.athlete_id}",
+        "INTERVALS_EQUIPMENT": "${user_config.equipment}"
       }
     }
   },
@@ -68,6 +69,12 @@
       "title": "Add your Athlete ID",
       "description": "e.g. i632406 (intervals.icu -> Settings)",
       "required": true
+    },
+    "equipment": {
+      "type": "string",
+      "title": "Your equipment (optional)",
+      "description": "Gear per sport, so workouts target the right metric. e.g. \"Bike: power meter, HR belt; Run: HR belt + GPS watch (no run power); Indoor: smart trainer\"",
+      "required": false
     }
   }
 }

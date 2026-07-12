@@ -20,7 +20,10 @@ Edit `.env` with your own credentials:
 ```
 INTERVALS_API_KEY=your_api_key_here   # intervals.icu Settings -> Developer
 INTERVALS_ATHLETE_ID=i00000           # your athlete id, e.g. i632406
+INTERVALS_EQUIPMENT=                  # optional, your gear per sport (see below)
 ```
+
+`INTERVALS_EQUIPMENT` is optional free text describing your gear, e.g. `Bike: power meter, HR belt; Run: HR belt + GPS watch (no run power); Indoor: smart trainer`. When set, planned workouts target the right metric (power / pace / HR) for what you actually have and each session tells you what to bring.
 
 Build:
 
@@ -104,7 +107,7 @@ don't strictly need a `.env` file if you set `INTERVALS_API_KEY` / `INTERVALS_AT
 - `get_activity` — full detail of one activity
 - `list_wellness` — sleep/HRV/RHR for recovery assessment
 - `list_events` — calendar (planned + completed workouts)
-- `create_event` — add a planned workout (structured intervals via `description`, e.g. `- 10m warmup Z1\n- 4x (5m Z4, 3m Z1)\n- 10m cooldown Z1`; `category` defaults to `WORKOUT`, use `RACE_A`/`RACE_B` for goal races)
+- `create_event` — add a planned workout. `description` uses intervals.icu syntax that renders as named laps, e.g. `Gear: power meter, HR belt\n- 10m Warmup ramp 50-70%\n- 4x (5m Work Z4, 3m Recovery Z1)\n- 10m Cooldown Z1` (one `- ` step per line = one lap; targets can be zones/power/HR/pace/cadence; a plain first line like `Gear: …` is a note, not a lap). `category` defaults to `WORKOUT`, use `RACE_A`/`RACE_B` for goal races
 - `create_events` — add many planned workouts at once (a whole training block) in one call
 - `update_event` — edit a planned workout
 - `delete_event` — remove a calendar entry

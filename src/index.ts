@@ -9,11 +9,15 @@ import * as intervals from "./intervals-client.js";
 import type { IntervalsCreds } from "./intervals-client.js";
 import type { ActivityIntervals } from "./intervals-types.js";
 import { planRace, nextBlock, analyzeForm, analyzeTrainings, todaysWorkout, logToday } from "./prompts.js";
+import type { PromptContext } from "./prompts.js";
 
 config({ path: join(dirname(fileURLToPath(import.meta.url)), "..", ".env"), quiet: true });
 
 const defaultApiKey = process.env.INTERVALS_API_KEY;
 const defaultAthleteId = process.env.INTERVALS_ATHLETE_ID;
+// Free-text gear the athlete declared (not from the API); injected into workout-writing prompts.
+// Defaults to a GPS watch — the one device nearly everyone has — when nothing is set.
+const equipment = process.env.INTERVALS_EQUIPMENT?.trim() || "GPS watch";
 
 function creds(athleteId?: string): IntervalsCreds {
   if (!defaultApiKey) {
@@ -105,8 +109,15 @@ server.registerTool(
     description:
       "Create a planned workout on the intervals.icu calendar. If the athlete has Garmin Connect linked in " +
       "intervals.icu settings, it will sync to their Garmin device automatically - no separate Garmin call needed. " +
-      "Use the `description` field with intervals.icu workout syntax for structured workouts, e.g. " +
-      "'- 10m warmup Z1\\n- 4x (5m Z4, 3m Z1)\\n- 10m cooldown Z1'.",
+      "Put the workout structure in `description` using intervals.icu syntax so it renders as clean, named laps:\n" +
+      "  - one step per line, prefixed with `- `; each named line becomes its own lap.\n" +
+      "  - duration: `10m` / `30s` / `1h`; or distance for run/swim: `400m` / `1km`.\n" +
+      "  - name the step so laps are readable: `- 10m Warmup ...`, `- 5m Work ...`, `- 3m Recovery ...`, `- 10m Cooldown ...`.\n" +
+      "  - target: zones `Z1`..`Z5`; power `65%` / `250w` / range `70-80%`; HR `Z2 HR` / `150bpm`; pace `4:30/km` or pace zone; cadence `90rpm`.\n" +
+      "  - ramp (warmup/cooldown): `- 10m Warmup ramp 50-70%`.\n" +
+      "  - repeats: `- 4x (5m Work Z4, 3m Recovery Z1)`.\n" +
+      "  - gear: put an equipment note as the FIRST plain line (no `- `), e.g. `Gear: power meter, HR belt` — a plain line is a note, not a lap.\n" +
+      "Example:\n'Gear: power meter, HR belt\\n- 10m Warmup ramp 50-70%\\n- 4x (5m Work Z4, 3m Recovery Z1)\\n- 10m Cooldown Z1'.",
     inputSchema: {
       start_date_local: dateParam.describe("Date of the workout, YYYY-MM-DD"),
       name: z.string().optional(),
@@ -294,7 +305,7 @@ server.registerPrompt(
     },
   },
   async (args) => {
-    let ctx = null;
+    let ctx: PromptContext | null = equipment ? { equipment } : null;
     try {
       const c = creds();
       const [athlete, sportSettings, activities, wellness] = await Promise.all([
@@ -303,7 +314,7 @@ server.registerPrompt(
         intervals.listActivities(c, isoDaysAgo(56), undefined, 60),
         intervals.listWellness(c, isoDaysAgo(21)),
       ]);
-      ctx = { athlete, sportSettings, activities, wellness };
+      ctx = { equipment, athlete, sportSettings, activities, wellness };
     } catch {
       // offline / API error: fall back to the instruction-only prompt (model fetches via tools)
     }
@@ -318,7 +329,7 @@ server.registerPrompt(
     argsSchema: { notes: z.string().optional().describe("Any updates or constraints") },
   },
   async (args) => {
-    let ctx = null;
+    let ctx: PromptContext | null = equipment ? { equipment } : null;
     try {
       const c = creds();
       const [athlete, sportSettings, activities, wellness, events] = await Promise.all([
@@ -328,7 +339,7 @@ server.registerPrompt(
         intervals.listWellness(c, isoDaysAgo(21)),
         intervals.listEvents(c, isoDaysAgo(35), isoDaysAgo(-365)),
       ]);
-      ctx = { athlete, sportSettings, activities, wellness, events };
+      ctx = { equipment, athlete, sportSettings, activities, wellness, events };
     } catch {
       // offline / API error: fall back to the instruction-only prompt
     }
@@ -420,7 +431,7 @@ server.registerPrompt(
     argsSchema: { notes: z.string().optional().describe("Anything about how you feel or your day") },
   },
   async (args) => {
-    let ctx = null;
+    let ctx: PromptContext | null = equipment ? { equipment } : null;
     try {
       const c = creds();
       const today = isoDaysAgo(0);
@@ -428,7 +439,7 @@ server.registerPrompt(
         intervals.listEvents(c, today, today),
         intervals.listWellness(c, isoDaysAgo(14)),
       ]);
-      ctx = { events, wellness };
+      ctx = { equipment, events, wellness };
     } catch {
       // offline / API error: fall back to the instruction-only prompt
     }

@@ -37,6 +37,11 @@ const pr = planRace({ sport: "cycling", distance: "100k", race_date: "2026-09-01
 assert.match(pr, /"ftp": 298/, "sport settings ftp embedded");
 assert.match(pr, /"powerZones"/, "zones embedded");
 
+// equipment (INTERVALS_EQUIPMENT) is injected into the workout-writing prompt
+const eq = planRace({ sport: "running", distance: "10k", race_date: "2026-09-01" },
+  { equipment: "Run: HR belt + GPS watch (no run power)" }).messages[0].content.text;
+assert.match(eq, /"equipment": "Run: HR belt \+ GPS watch \(no run power\)"/, "equipment embedded in context");
+
 // analyzeTrainings session: rich single-workout metrics + per-interval trim
 const session = analyzeTrainings({ range: "session" }, {
   activityDetail: { id: "i1", start_date_local: "2026-07-11", type: "Ride", name: "Gniezno",
